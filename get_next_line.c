@@ -6,7 +6,7 @@
 /*   By: spopieul <spopieul@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2017/12/16 19:41:05 by spopieul          #+#    #+#             */
-/*   Updated: 2017/12/16 20:28:47 by spopieul         ###   ########.fr       */
+/*   Updated: 2018/01/09 20:38:01 by spopieul         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,99 +14,134 @@
 
 void	ft_cb_read(t_cb *cb, void *data, size_t size)
 {
-	int max = cb->end - cb->tail;
+	size_t max;
 
+	max = cb->end - cb->tail;
 	while (size > max)
 	{
 		ft_memcpy(data, cb->tail, max);
 		size -= max;
-		cb->tail = cb->start;
+		cb->tail = cb->buf;
 		cb->content_size -= max;
+		data += max;
 	}
-	if (size < max)
+	if (size <= max)
 	{
 		ft_memcpy(data, cb->tail, size);
 		cb->tail += size;
 		cb->content_size -= size;
+		data += size;
 	}
 	if (cb->tail == cb->end)
-		cb->tail = cb->start;
+		cb->tail = cb->buf;
 }
 
 void	ft_cb_write(t_cb *cb, void *data, size_t size)
 {
-	int max = cb->end - cb->head;
+	size_t max;
 
+	max = cb->end - cb->head;
 	while (size > max)
 	{
 		ft_memcpy(cb->head, data, max);
 		size -= max;
-		cb->head = cb->start;
+		cb->head = cb->buf;
 		cb->content_size += max;
+		data += max;
 	}
-	if (size < max)
+	if (size <= max)
 	{
 		ft_memcpy(cb->head, data, size);
 		cb->head += size;
 		cb->content_size += size;
+		data += size;
 	}
+	if (cb->content_size > (size_t)(cb->end - cb->buf))
+		cb->content_size = cb->end - cb->buf;
 	if (cb->head == cb->end)
-		cb->head = cb->start;
+		cb->head = cb->buf;
 }
 
-int		flush_line(t_cb *cb, char **line)
+t_fdstate	*ft_get_fdstate(t_list **fdstate_lst, const int fd)
 {
-	int i;
-	char data;
+	t_list *tmp;
+	t_list *new;
+	t_fdstate *state;
 
-	i = -1;
-	data = 0;
-	while (cb->content_size > 0)
+	tmp = *fdstate_lst;
+	while (tmp)
 	{
-		ft_cb_read(cb, &data, 1);
-		if (data == '\n')
-			return (1);
-		(*line)[++i] = data;
+		if (tmp->content && ((t_fdstate*)tmp->content)->fd == fd)
+			return ((t_fdstate*)tmp->content);
+		tmp = tmp->next;
 	}
-	return (0);
+	if (!(new = ft_memalloc(sizeof(*new))))
+		return (NULL);
+	if (!(new->content = ft_memalloc(sizeof(t_fdstate))))
+		return (NULL);
+	state = new->content;
+	state->fd = fd;
+	if (!(state->cb = ft_memalloc(sizeof(*state->cb))) ||
+		!(state->cb->buf = ft_memalloc(BUFF_SIZE)))
+		return (NULL);
+	state->cb->end = state->cb->buf + BUFF_SIZE;
+	state->cb->head = state->cb->buf;
+	state->cb->tail = state->cb->buf;
+	ft_lstadd(fdstate_lst, new);
+	return (ft_get_fdstate(fdstate_lst, fd));
 }
 
-t_cb	*ft_cb_init(size_t size)
+int			get_next_line2(t_fdstate *state, char **line, char *tmp)
 {
-	t_cb *cb;
+	size_t i;
+	int c;
+	int ret;
+	char buf[BUFF_SIZE];
+	char *line_tmp;
 
-	cb = ft_memalloc(sizeof(*cb));
-	if (cb == NULL)
-		return (NULL);
-	cb->start = ft_memalloc(size);
-	if (cb->start == NULL)
-		return (NULL);
-	cb->end = cb->start + size;
-	cb->content_size = 0;
-	cb->head = cb->start;
-	cb->tail = cb->start;
-	ft_cb_write(cb, "helloda\nsdas das\ndsada", 22);
-	return (cb);
-}
-
-int		get_next_line(const int fd, char **line)
-{
-	static t_cb *cb;
-
-	if (cb == NULL)
-		cb = ft_cb_init(BUFF_SIZE);
-	*line = ft_strnew(50);
-	if (flush_line(cb, line))
+	i = 0;
+	tmp = ft_strnew(state->cb->content_size);
+	while (!(c = 0) && state->cb->content_size > 0)
+	{
+		ft_cb_read(state->cb, &c, 1);
+		if (c == '\n')
+			break ;
+		tmp[i++] = c;
+	}
+	line_tmp = *line;
+	*line = ft_strjoin(*line, tmp);
+	ft_strdel(&tmp);
+	ft_strdel(&line_tmp);
+	if (c == '\n')
 		return (1);
-	return (0);
+	if ((ret = read(state->fd, buf, BUFF_SIZE)) <= 0)
+		return ((ret == 0 && **line != 0) ? 1 : ret);
+	ft_cb_write(state->cb, buf, ret);
+	return (get_next_line2(state, line, tmp));
 }
 
-int main()
+int			get_next_line(const int fd, char **line)
 {
-	char *line;
+	static t_list 	*fdstate_lst;
+	t_fdstate		*state;
+	int				ret;
 
-	get_next_line(0, &line);
-	get_next_line(0, &line);
-	get_next_line(0, &line);
-	ft_putendl(line);
+	if (fd < 0 || line == NULL)
+		return (-1);
+	if (fdstate_lst == NULL)
+	{
+		fdstate_lst = ft_memalloc(sizeof(*fdstate_lst));
+		if (fdstate_lst == NULL)
+			return (-1);
+	}
+	state = ft_get_fdstate(&fdstate_lst, fd);
+	if (state == NULL)
+		return (-1);
+	*line = ft_strnew(0);
+	if (*line == NULL)
+		return (-1);
+	ret = get_next_line2(state, line, NULL);
+	if (ret <= 0)
+		ft_strdel(line);
+	return (ret);
 }
