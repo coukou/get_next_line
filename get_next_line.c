@@ -6,13 +6,13 @@
 /*   By: spopieul <spopieul@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2017/12/16 19:41:05 by spopieul          #+#    #+#             */
-/*   Updated: 2018/01/09 20:38:01 by spopieul         ###   ########.fr       */
+/*   Updated: 2018/01/22 17:58:32 by spopieul         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "get_next_line.h"
 
-void	ft_cb_read(t_cb *cb, void *data, size_t size)
+void		ft_cb_read(t_cb *cb, void *data, size_t size)
 {
 	size_t max;
 
@@ -36,7 +36,7 @@ void	ft_cb_read(t_cb *cb, void *data, size_t size)
 		cb->tail = cb->buf;
 }
 
-void	ft_cb_write(t_cb *cb, void *data, size_t size)
+void		ft_cb_write(t_cb *cb, void *data, size_t size)
 {
 	size_t max;
 
@@ -64,9 +64,9 @@ void	ft_cb_write(t_cb *cb, void *data, size_t size)
 
 t_fdstate	*ft_get_fdstate(t_list **fdstate_lst, const int fd)
 {
-	t_list *tmp;
-	t_list *new;
-	t_fdstate *state;
+	t_list		*tmp;
+	t_list		*new;
+	t_fdstate	*state;
 
 	tmp = *fdstate_lst;
 	while (tmp)
@@ -88,16 +88,16 @@ t_fdstate	*ft_get_fdstate(t_list **fdstate_lst, const int fd)
 	state->cb->head = state->cb->buf;
 	state->cb->tail = state->cb->buf;
 	ft_lstadd(fdstate_lst, new);
-	return (ft_get_fdstate(fdstate_lst, fd));
+	return (state);
 }
 
 int			get_next_line2(t_fdstate *state, char **line, char *tmp)
 {
-	size_t i;
-	int c;
-	int ret;
-	char buf[BUFF_SIZE];
-	char *line_tmp;
+	size_t	i;
+	int		c;
+	int		ret;
+	char	buf[BUFF_SIZE];
+	char	*line_tmp;
 
 	i = 0;
 	tmp = ft_strnew(state->cb->content_size);
@@ -122,7 +122,7 @@ int			get_next_line2(t_fdstate *state, char **line, char *tmp)
 
 int			get_next_line(const int fd, char **line)
 {
-	static t_list 	*fdstate_lst;
+	static t_list	*fdstate_lst;
 	t_fdstate		*state;
 	int				ret;
 
@@ -141,7 +141,5 @@ int			get_next_line(const int fd, char **line)
 	if (*line == NULL)
 		return (-1);
 	ret = get_next_line2(state, line, NULL);
-	if (ret <= 0)
-		ft_strdel(line);
 	return (ret);
 }
